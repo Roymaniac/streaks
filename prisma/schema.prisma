@@ -1,0 +1,99 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Frequency {
+  DAILY
+  WEEKLY
+}
+
+enum PartnershipStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  avatarUrl     String?
+  hashedPassword String? // null for OAuth-only users
+  createdAt     DateTime @default(now())
+
+  habits              Habit[]
+  sentPartnerships    Partnership[] @relation("PartnershipRequester")
+  receivedPartnerships Partnership[] @relation("PartnershipRecipient")
+  sentNudges          Nudge[]       @relation("NudgeSender")
+  receivedNudges      Nudge[]       @relation("NudgeRecipient")
+}
+
+model Habit {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  frequency   Frequency @default(DAILY)
+  color       String    @default("teal")
+  icon        String    @default("ti-check")
+  archived    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  logs        HabitLog[]
+
+  @@index([userId])
+}
+
+model HabitLog {
+  id        String   @id @default(cuid())
+  habitId   String
+  habit     Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date
+  completed Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  // one log per habit per calendar day
+  @@unique([habitId, date])
+  @@index([habitId, date])
+}
+
+model Partnership {
+  id          String            @id @default(cuid())
+  requesterId String
+  requester   User              @relation("PartnershipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  recipientId String
+  recipient   User              @relation("PartnershipRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  status      PartnershipStatus @default(PENDING)
+  createdAt   DateTime          @default(now())
+  respondedAt DateTime?
+
+  nudges      Nudge[]
+
+  // prevent duplicate invites between the same two users
+  @@unique([requesterId, recipientId])
+  @@index([recipientId])
+}
+
+model Nudge {
+  id            String       @id @default(cuid())
+  partnershipId String
+  partnership   Partnership  @relation(fields: [partnershipId], references: [id], onDelete: Cascade)
+  senderId      String
+  sender        User         @relation("NudgeSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipientId   String
+  recipient     User         @relation("NudgeRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  message       String?
+  createdAt     DateTime     @default(now())
+
+  @@index([recipientId])
+}
